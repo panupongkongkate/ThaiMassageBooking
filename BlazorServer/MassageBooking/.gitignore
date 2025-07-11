@@ -68,8 +68,9 @@ connectionstrings.json
 *.cer
 
 # Image files (if not part of the project)
-*.PNG
-*.png
+# Note: PNG files in ShowImg/ are needed for README.md documentation
+# *.PNG
+# *.png
 *.jpg
 *.jpeg
 *.gif
@@ -77,7 +78,7 @@ connectionstrings.json
 *.tiff
 *.svg
 Img/
-ShowImg/
+# ShowImg/ - Commented out to allow documentation images
 
 # Log files
 logs/

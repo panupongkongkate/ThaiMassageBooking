@@ -421,10 +421,11 @@ TestResults/
 # =============================================
 # Massage Booking specific ignores
 booking.db*
-*.PNG
-*.png
+# Note: Image files in ShowImg/ are needed for README.md documentation
+# *.PNG
+# *.png
 *.jpg
 *.jpeg
 *.gif
 Img/
-ShowImg/
+# ShowImg/ - Commented out to allow documentation images
