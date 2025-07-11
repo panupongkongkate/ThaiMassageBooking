@@ -1,0 +1,240 @@
+@page "/bookings"
+@using MassageBooking.Models
+@using MassageBooking.Services
+@inject BookingService BookingService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<PageTitle>ตารางการจอง - ระบบจองนวด</PageTitle>
+
+<div class="bookings-container">
+    <div class="bookings-header">
+        <h1 class="page-title">
+            <span class="title-icon">📅</span>
+            ตารางการจอง
+        </h1>
+        <p class="page-subtitle">ดูการจองทั้งหมดของเดือน</p>
+        <button class="refresh-btn" @onclick="LoadBookings" disabled="@isLoading" style="margin-top: 10px;">
+            @if (isLoading)
+            {
+                <span>🔄 กำลังโหลด...</span>
+            }
+            else
+            {
+                <span>🔄 รีเฟรช</span>
+            }
+        </button>
+    </div>
+
+    <!-- Month/Year Selector -->
+    <div class="date-selector-container">
+        <div class="date-selector">
+            <div class="selector-group">
+                <label class="selector-label">เดือน</label>
+                <select class="month-select" @bind="selectedMonth" @bind:event="onchange" @bind:after="OnDateChanged">
+                    @for (int i = 1; i <= 12; i++)
+                    {
+                        <option value="@i">@Constants.GetThaiMonth(i)</option>
+                    }
+                </select>
+            </div>
+            <div class="selector-group">
+                <label class="selector-label">ปี</label>
+                <select class="year-select" @bind="selectedYear" @bind:event="onchange" @bind:after="OnDateChanged">
+                    @for (int year = currentYear - 1; year <= currentYear + 1; year++)
+                    {
+                        <option value="@year">@Constants.GetThaiYear(year)</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bookings Content -->
+    <div class="bookings-content">
+        @if (isLoading)
+        {
+            <div class="loading-container">
+                <div class="spinner"></div>
+                <p class="loading-text">กำลังโหลดข้อมูลการจอง...</p>
+            </div>
+        }
+        else if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="error-container">
+                <div class="error-message">
+                    <span class="error-icon">⚠️</span>
+                    @errorMessage
+                </div>
+                <button class="retry-btn" @onclick="LoadBookings">
+                    ลองใหม่อีกครั้ง
+                </button>
+            </div>
+        }
+        else if (bookings.Count == 0)
+        {
+            <div class="empty-container">
+                <div class="empty-icon">📋</div>
+                <h3 class="empty-title">ไม่มีการจองในเดือนนี้</h3>
+                <p class="empty-text">ยังไม่มีการจองในเดือน @Constants.GetThaiMonth(selectedMonth) @Constants.GetThaiYear(selectedYear)</p>
+                <button class="book-now-btn" @onclick="GoToBooking">
+                    จองเลย
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="bookings-stats">
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-info">
+                        <div class="stat-value">@bookings.Count</div>
+                        <div class="stat-label">การจองทั้งหมด</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bookings-table-container">
+                <div class="table-header">
+                    <h3>รายการจอง @Constants.GetThaiMonth(selectedMonth) @Constants.GetThaiYear(selectedYear)</h3>
+                </div>
+                
+                <div class="bookings-grid">
+                    @foreach (var booking in bookings.OrderBy(b => b.Date).ThenBy(b => b.TimeSlot))
+                    {
+                        <div class="booking-card">
+                            <div class="booking-header">
+                                <div class="booking-date">
+                                    <div class="date-day">@booking.Date.Day</div>
+                                    <div class="date-month">@Constants.GetThaiMonth(booking.Date.Month)</div>
+                                </div>
+                            </div>
+                            
+                            <div class="booking-details">
+                                <div class="detail-row">
+                                    <span class="detail-icon">⏰</span>
+                                    <span class="detail-text">@booking.TimeSlot น.</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-icon">👤</span>
+                                    <span class="detail-text">@booking.CustomerName</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-icon">💆‍♀️</span>
+                                    <span class="detail-text">@booking.MasseurName</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-icon">📞</span>
+                                    <span class="detail-text">@booking.PhoneNumber</span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(booking.Pincode))
+                                {
+                                    <div class="detail-row pincode-row">
+                                        <span class="detail-icon">🔐</span>
+                                        <span class="detail-text">รหัส: @booking.Pincode</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<Booking> bookings = new();
+    private int selectedMonth = DateTime.Now.Month;
+    private int selectedYear = DateTime.Now.Year;
+    private int currentYear = DateTime.Now.Year;
+    private bool isLoading = true;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Don't check login here due to static rendering
+        await LoadBookings();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Check if user is logged in (after render when JS is available)
+            var isLoggedIn = await IsUserLoggedInAsync();
+            if (!isLoggedIn)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadBookings()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = string.Empty;
+            
+            bookings = await BookingService.GetBookingsByMonthAsync(selectedYear, selectedMonth);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"ไม่สามารถโหลดข้อมูลการจองได้: {ex.Message}";
+            bookings = new List<Booking>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnDateChanged()
+    {
+        await LoadBookings();
+    }
+
+    private void GoToBooking()
+    {
+        Navigation.NavigateTo("/home");
+    }
+
+    private string GetStatusClass(string status)
+    {
+        return status?.ToLower() switch
+        {
+            "confirmed" => "status-confirmed",
+            "completed" => "status-completed",
+            "cancelled" => "status-cancelled",
+            _ => "status-pending"
+        };
+    }
+
+    private string GetStatusText(string status)
+    {
+        return status?.ToLower() switch
+        {
+            "confirmed" => "ยืนยันแล้ว",
+            "completed" => "เสร็จสิ้น",
+            "cancelled" => "ยกเลิก",
+            _ => "รอยืนยัน"
+        };
+    }
+
+    private async Task<bool> IsUserLoggedInAsync()
+    {
+        try
+        {
+            var userId = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "userId");
+            return !string.IsNullOrEmpty(userId);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+}

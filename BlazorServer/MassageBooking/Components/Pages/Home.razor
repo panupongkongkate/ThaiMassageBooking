@@ -1,0 +1,389 @@
+@page "/home"
+@page "/"
+@using MassageBooking.Models
+@using MassageBooking.Services
+@inject BookingService BookingService
+@inject MasseurService MasseurService
+@inject ApiService ApiService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<PageTitle>จองนวด - ระบบจองนวด</PageTitle>
+
+<div class="home-container">
+    <!-- Header Section (like Flutter) -->
+    <div class="header-section">
+        <div class="spa-icon">💆‍♀️</div>
+        <h1 class="header-title">ลงทะเบียนจองนวด</h1>
+        <p class="header-subtitle">กรุณากรอกข้อมูลให้ครบถ้วน</p>
+    </div>
+
+    <div class="booking-form-container">
+        <form class="booking-form" @onsubmit="SubmitBooking" @onsubmit:preventDefault="true">
+            
+            <!-- Date Selection (Flutter style) -->
+            <div class="section">
+                <h3 class="section-title">วันที่</h3>
+                <div class="date-card" @onclick="ShowDatePicker">
+                    <div class="card-icon">📅</div>
+                    <div class="card-content">
+                        <span class="date-text">@selectedDate.ToString("dd/MM/yyyy")</span>
+                    </div>
+                    <div class="card-arrow">❯</div>
+                </div>
+            </div>
+
+            <!-- Customer Name -->
+            <div class="section">
+                <h3 class="section-title">ชื่อผู้จอง</h3>
+                <div class="input-group">
+                    <div class="input-icon">👤</div>
+                    <input type="text" class="form-input" @bind="customerName" 
+                           placeholder="กรุณากรอกชื่อ-นามสกุล" required 
+                           minlength="2" maxlength="100" 
+                           pattern="[ก-๙a-zA-Z\s]+" 
+                           title="กรุณากรอกชื่อ-นามสกุล (ภาษาไทยหรือภาษาอังกฤษ 2-100 ตัวอักษร)" />
+                </div>
+                @if (!string.IsNullOrEmpty(customerName) && !IsValidName(customerName))
+                {
+                    <div class="validation-error">ชื่อต้องมีความยาว 2-100 ตัวอักษร และเป็นภาษาไทยหรือภาษาอังกฤษเท่านั้น</div>
+                }
+            </div>
+
+            <!-- Phone Number -->
+            <div class="section">
+                <h3 class="section-title">เบอร์ติดต่อ</h3>
+                <div class="input-group">
+                    <div class="input-icon">📞</div>
+                    <input type="tel" class="form-input" @bind="phoneNumber" 
+                           placeholder="กรุณากรอกเบอร์โทรศัพท์ (เช่น 0812345678)" required 
+                           pattern="[0-9]{10}" 
+                           minlength="10" maxlength="10"
+                           title="กรุณากรอกเบอร์โทรศัพท์ 10 หลัก" />
+                </div>
+                @if (!string.IsNullOrEmpty(phoneNumber) && !IsValidPhoneNumber(phoneNumber))
+                {
+                    <div class="validation-error">เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก เช่น 0812345678</div>
+                }
+            </div>
+
+            <!-- Masseur Selection -->
+            <div class="section">
+                <h3 class="section-title">ชื่อหมอนวด</h3>
+                @if (isLoadingMasseurs)
+                {
+                    <div class="loading-dropdown">
+                        <div class="input-icon">⏳</div>
+                        <span>กำลังโหลดรายชื่อหมอนวด...</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="input-group">
+                        <div class="input-icon">👩‍⚕️</div>
+                        <select class="form-select" @bind="selectedMasseur" required>
+                            <option value="">-- เลือกหมอนวด --</option>
+                            @foreach (var masseur in masseurNames)
+                            {
+                                <option value="@masseur">@masseur</option>
+                            }
+                        </select>
+                    </div>
+                }
+            </div>
+
+            <!-- Time Selection -->
+            <div class="section">
+                <h3 class="section-title">เวลา</h3>
+                <div class="input-group">
+                    <div class="input-icon">⏰</div>
+                    <select class="form-select" @bind="selectedTimeSlot" required>
+                        @foreach (var timeSlot in Constants.TimeSlots)
+                        {
+                            <option value="@timeSlot">@timeSlot</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="submit-section">
+                <button type="submit" class="submit-btn" disabled="@(isSubmitting || !IsFormValid())">
+                    @if (isSubmitting)
+                    {
+                        <span class="btn-spinner"></span>
+                        <span>กำลังจอง...</span>
+                    }
+                    else
+                    {
+                        <span>จองเลย</span>
+                    }
+                </button>
+            </div>
+
+        </form>
+    </div>
+</div>
+
+<!-- Success Modal (แบบ SnackBar) -->
+@if (showSuccessModal)
+{
+    <div class="snackbar @(showSuccessModal ? "show" : "")">
+        <div class="snackbar-content">
+            <div class="success-icon">✅</div>
+            <div class="snackbar-text">
+                <strong>จองสำเร็จ!</strong> รหัสจอง: @bookingPincode<br>
+                @customerName วันที่ @selectedDate.ToString("dd/MM/yyyy")
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Error Modal -->
+@if (showErrorModal)
+{
+    <div class="modal-overlay" @onclick="CloseErrorModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <div class="modal-icon error">⚠️</div>
+                <h3 class="modal-title">แจ้งเตือน</h3>
+                <button type="button" class="modal-close" @onclick="CloseErrorModal">×</button>
+            </div>
+            <div class="modal-body">
+                <p>@errorMessage</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-modal-ok" @onclick="CloseErrorModal">ตกลง</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DateTime selectedDate = DateTime.Now;
+    private string customerName = string.Empty;
+    private string phoneNumber = string.Empty;
+    private string selectedMasseur = string.Empty;
+    private string selectedTimeSlot = Constants.TimeSlots.First();
+
+    private List<string> masseurNames = new();
+    private bool isLoadingMasseurs = true;
+    private bool isSubmitting = false;
+    private string errorMessage = string.Empty;
+
+    private bool showSuccessModal = false;
+    private bool showErrorModal = false;
+    private string bookingPincode = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Don't check login here due to static rendering
+        await LoadMasseurs();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Check if user is logged in (after render when JS is available)
+            var isLoggedIn = await IsUserLoggedInAsync();
+            if (!isLoggedIn)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+            StateHasChanged();
+        }
+    }
+
+    private async Task<bool> IsUserLoggedInAsync()
+    {
+        try
+        {
+            var userId = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "userId");
+            Console.WriteLine($"[HOME DEBUG] UserId from session: {userId}");
+            var isLoggedIn = !string.IsNullOrEmpty(userId);
+            Console.WriteLine($"[HOME DEBUG] IsLoggedIn: {isLoggedIn}");
+            return isLoggedIn;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[HOME DEBUG] Error checking login: {ex.Message}");
+            return false;
+        }
+    }
+
+    private async Task LoadMasseurs()
+    {
+        try
+        {
+            isLoadingMasseurs = true;
+            masseurNames = await MasseurService.GetMasseurNamesAsync();
+            
+            // Set first masseur as default like Flutter
+            if (masseurNames.Count > 0)
+            {
+                selectedMasseur = masseurNames.First();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"ไม่สามารถโหลดรายชื่อหมอนวดได้: {ex.Message}";
+            showErrorModal = true;
+        }
+        finally
+        {
+            isLoadingMasseurs = false;
+        }
+    }
+
+    private async Task ShowDatePicker()
+    {
+        try
+        {
+            // Use JavaScript date picker
+            var result = await JSRuntime.InvokeAsync<string>("prompt", 
+                "กรุณาเลือกวันที่ (dd/mm/yyyy):", selectedDate.ToString("dd/MM/yyyy"));
+            
+            if (!string.IsNullOrEmpty(result))
+            {
+                if (DateTime.TryParseExact(result, "dd/MM/yyyy", null, System.Globalization.DateTimeStyles.None, out var newDate))
+                {
+                    if (newDate >= DateTime.Now.Date)
+                    {
+                        selectedDate = newDate;
+                        StateHasChanged();
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Fallback: do nothing if JS fails
+        }
+    }
+
+    private bool IsFormValid()
+    {
+        return !string.IsNullOrWhiteSpace(customerName) &&
+               !string.IsNullOrWhiteSpace(phoneNumber) &&
+               !string.IsNullOrWhiteSpace(selectedMasseur) &&
+               !string.IsNullOrWhiteSpace(selectedTimeSlot) &&
+               IsValidName(customerName) &&
+               IsValidPhoneNumber(phoneNumber);
+    }
+
+    private bool IsValidName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        
+        // ตรวจสอบความยาว 2-100 ตัวอักษร
+        if (name.Trim().Length < 2 || name.Trim().Length > 100) return false;
+        
+        // ตรวจสอบว่าเป็นภาษาไทย ภาษาอังกฤษ หรือช่องว่างเท่านั้น
+        return System.Text.RegularExpressions.Regex.IsMatch(name, @"^[ก-๙a-zA-Z\s]+$");
+    }
+
+    private bool IsValidPhoneNumber(string phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone)) return false;
+        
+        // ตรวจสอบว่าเป็นตัวเลข 10 หลัก
+        return System.Text.RegularExpressions.Regex.IsMatch(phone, @"^[0-9]{10}$");
+    }
+
+    private async Task SubmitBooking()
+    {
+        if (!IsFormValid() || isSubmitting)
+            return;
+
+        try
+        {
+            isSubmitting = true;
+            errorMessage = string.Empty;
+
+            var booking = new BookingRequest
+            {
+                Date = selectedDate,
+                CustomerName = customerName.Trim(),
+                PhoneNumber = phoneNumber.Trim(),
+                MasseurName = selectedMasseur,
+                TimeSlot = selectedTimeSlot
+            };
+
+            var response = await BookingService.AddBookingAsync(booking);
+            
+            if (response != null && response.Success)
+            {
+                bookingPincode = response.Pincode;
+                
+                // Send LINE notification
+                try
+                {
+                    var userId = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "userId");
+                    if (!string.IsNullOrEmpty(userId))
+                    {
+                        var message = $"การจองสำเร็จ!\n" +
+                                    $"รหัสจอง: {bookingPincode}\n" +
+                                    $"ชื่อ: {customerName}\n" +
+                                    $"วันที่: {selectedDate:dd/MM/yyyy}\n" +
+                                    $"เวลา: {selectedTimeSlot}\n" +
+                                    $"หมอนวด: {selectedMasseur}";
+                        
+                        await ApiService.SendMessageAsync(userId, message);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to send LINE notification: {ex.Message}");
+                }
+                
+                // Show snackbar success (like Flutter)
+                showSuccessModal = true;
+                StateHasChanged();
+                
+                // Hide after 5 seconds
+                await Task.Delay(5000);
+                showSuccessModal = false;
+                StateHasChanged();
+
+                // Reset form (like Flutter)
+                ResetForm();
+            }
+            else
+            {
+                errorMessage = response?.Message ?? "ช่วงเวลานี้มีการจองแล้ว";
+                showErrorModal = true;
+                Console.WriteLine($"[HOME DEBUG] Setting error message: {errorMessage}");
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"เกิดข้อผิดพลาด: {ex.Message}";
+            showErrorModal = true;
+            StateHasChanged();
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void ResetForm()
+    {
+        customerName = string.Empty;
+        phoneNumber = string.Empty;
+        selectedDate = DateTime.Now;
+        selectedMasseur = masseurNames.Count > 0 ? masseurNames.First() : string.Empty;
+        selectedTimeSlot = Constants.TimeSlots.First();
+    }
+
+    private void CloseErrorModal()
+    {
+        showErrorModal = false;
+        errorMessage = string.Empty;
+        StateHasChanged();
+    }
+}

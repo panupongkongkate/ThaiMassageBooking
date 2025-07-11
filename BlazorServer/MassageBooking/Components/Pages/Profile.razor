@@ -1,0 +1,241 @@
+@page "/profile"
+@using MassageBooking.Models
+@using MassageBooking.Services
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<PageTitle>โปรไฟล์ - ระบบจองนวด</PageTitle>
+
+<div class="profile-container">
+    @if (isLoading)
+    {
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p class="loading-text">กำลังโหลดข้อมูลผู้ใช้...</p>
+        </div>
+    }
+    else if (!isLoggedIn)
+    {
+        <div class="not-logged-in">
+            <div class="login-prompt-container">
+                <div class="login-icon">👤</div>
+                <h2 class="login-title">กรุณาเข้าสู่ระบบ</h2>
+                <p class="login-text">เพื่อดูข้อมูลโปรไฟล์ของคุณ</p>
+                <button class="login-btn" @onclick="GoToLogin">
+                    เข้าสู่ระบบ
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="profile-content">
+            <!-- Profile Header -->
+            <div class="profile-header">
+                <div class="profile-avatar">
+                    @if (!string.IsNullOrEmpty(pictureUrl))
+                    {
+                        <img src="@pictureUrl" alt="Profile Picture" class="avatar-image" />
+                    }
+                    else
+                    {
+                        <div class="avatar-placeholder">
+                            <span class="avatar-icon">👤</span>
+                        </div>
+                    }
+                </div>
+                <div class="profile-info">
+                    <h1 class="profile-name">@displayName</h1>
+                    <p class="profile-subtitle">สมาชิกระบบจองนวด</p>
+                </div>
+            </div>
+
+
+            <!-- Profile Menu -->
+            <div class="profile-menu">
+                <div class="menu-section">
+                    <h3 class="section-title">การจองของฉัน</h3>
+                    <div class="menu-items">
+                        <button class="menu-item" @onclick="GoToBookings">
+                            <div class="menu-icon">📋</div>
+                            <div class="menu-content">
+                                <div class="menu-title">ตารางการจอง</div>
+                                <div class="menu-subtitle">ดูการจองทั้งหมด</div>
+                            </div>
+                            <div class="menu-arrow">❯</div>
+                        </button>
+                        
+                        <button class="menu-item" @onclick="GoToHome">
+                            <div class="menu-icon">➕</div>
+                            <div class="menu-content">
+                                <div class="menu-title">จองใหม่</div>
+                                <div class="menu-subtitle">สร้างการจองใหม่</div>
+                            </div>
+                            <div class="menu-arrow">❯</div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="menu-section">
+                    <h3 class="section-title">ข้อมูลส่วนตัว</h3>
+                    <div class="menu-items">
+                        <div class="info-item">
+                            <div class="info-icon">👤</div>
+                            <div class="info-content">
+                                <div class="info-label">ชื่อผู้ใช้</div>
+                                <div class="info-value">@displayName</div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-icon">🔗</div>
+                            <div class="info-content">
+                                <div class="info-label">เชื่อมต่อผ่าน</div>
+                                <div class="info-value">LINE Account</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="menu-section settings-section">
+                    <h3 class="section-title">การตั้งค่า</h3>
+                    <div class="menu-items">
+                        <button class="menu-item danger" @onclick="ShowLogoutConfirm">
+                            <div class="menu-icon">🚪</div>
+                            <div class="menu-content">
+                                <div class="menu-title">ออกจากระบบ</div>
+                                <div class="menu-subtitle">ลงชื่อออกจากบัญชี</div>
+                            </div>
+                            <div class="menu-arrow">❯</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Logout Confirmation Modal -->
+@if (showLogoutModal)
+{
+    <div class="modal-overlay" @onclick="HideLogoutConfirm">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <div class="logout-icon">🚪</div>
+                <h2 class="modal-title">ออกจากระบบ</h2>
+            </div>
+            <div class="modal-body">
+                <p class="modal-text">คุณต้องการออกจากระบบใช่หรือไม่?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn secondary" @onclick="HideLogoutConfirm">
+                    ยกเลิก
+                </button>
+                <button class="modal-btn danger" @onclick="ConfirmLogout">
+                    ออกจากระบบ
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool isLoggedIn = false;
+    private string displayName = string.Empty;
+    private string pictureUrl = string.Empty;
+    private bool showLogoutModal = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Don't check login here due to static rendering
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadUserProfile();
+            
+            // Check if user is logged in, redirect to login if not
+            if (!isLoggedIn)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadUserProfile()
+    {
+        try
+        {
+            isLoading = true;
+            
+            var userId = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "userId");
+            if (!string.IsNullOrEmpty(userId))
+            {
+                isLoggedIn = true;
+                displayName = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "displayName") ?? "ผู้ใช้";
+                pictureUrl = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "pictureUrl") ?? "";
+            }
+            else
+            {
+                isLoggedIn = false;
+            }
+        }
+        catch
+        {
+            isLoggedIn = false;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void GoToLogin()
+    {
+        Navigation.NavigateTo("/login");
+    }
+
+    private void GoToBookings()
+    {
+        Navigation.NavigateTo("/bookings");
+    }
+
+    private void GoToHome()
+    {
+        Navigation.NavigateTo("/home");
+    }
+
+    private void ShowLogoutConfirm()
+    {
+        showLogoutModal = true;
+    }
+
+    private void HideLogoutConfirm()
+    {
+        showLogoutModal = false;
+    }
+
+    private async Task ConfirmLogout()
+    {
+        try
+        {
+            // Clear session storage
+            await JSRuntime.InvokeVoidAsync("sessionStorage.clear");
+            
+            // Redirect to login
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Logout error: {ex.Message}");
+            // Force redirect anyway
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+    }
+}

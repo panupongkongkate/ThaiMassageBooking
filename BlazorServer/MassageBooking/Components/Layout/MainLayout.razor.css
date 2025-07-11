@@ -1,0 +1,165 @@
+/* Main app layout */
+.app-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.main-content {
+    flex: 1;
+    padding-bottom: 100px; /* Space for bottom nav (70px + 30px margin) */
+    background: #f8f9fa;
+}
+
+.main-content.no-bottom-padding {
+    padding-bottom: 0; /* No bottom padding for login pages */
+}
+
+/* Bottom navigation */
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 1200px; /* Same as main content container */
+    height: 70px;
+    background: white;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    z-index: 1000;
+}
+
+.nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-decoration: none;
+    color: #757575;
+    transition: color 0.3s ease;
+    padding: 8px 12px;
+    border-radius: 8px;
+    min-width: 60px;
+}
+
+.nav-item:hover {
+    color: #1976d2;
+    text-decoration: none;
+}
+
+.nav-item.active {
+    color: #1976d2;
+    background: #e3f2fd;
+}
+
+.nav-icon {
+    font-size: 20px;
+    margin-bottom: 4px;
+}
+
+.nav-label {
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Responsive design */
+@media (min-width: 1024px) {
+    .main-content {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding-bottom: 60px; /* Reduced for desktop since bottom nav might be different */
+    }
+    
+    .bottom-nav {
+        height: 80px; /* Slightly taller on desktop */
+        max-width: 1000px; /* Narrower on desktop */
+        border-radius: 16px 16px 0 0; /* Rounded top corners */
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+    }
+    
+    .nav-item {
+        padding: 12px 20px;
+        min-width: 80px;
+    }
+    
+    .nav-icon {
+        font-size: 24px;
+        margin-bottom: 6px;
+    }
+    
+    .nav-label {
+        font-size: 14px;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+    .main-content {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    
+    .bottom-nav {
+        height: 75px;
+    }
+    
+    .nav-item {
+        padding: 10px 16px;
+        min-width: 70px;
+    }
+    
+    .nav-icon {
+        font-size: 22px;
+        margin-bottom: 5px;
+    }
+    
+    .nav-label {
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 767px) {
+    .main-content {
+        padding: 10px;
+    }
+    
+    .bottom-nav {
+        left: 0;
+        transform: none;
+        width: 100%;
+        max-width: none;
+    }
+}
+
+/* Error UI */
+#blazor-error-ui {
+    background: #ffebee;
+    color: #c62828;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1001;
+    font-size: 14px;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+    font-size: 18px;
+}
+
+#blazor-error-ui .reload {
+    color: #1976d2;
+    text-decoration: underline;
+}

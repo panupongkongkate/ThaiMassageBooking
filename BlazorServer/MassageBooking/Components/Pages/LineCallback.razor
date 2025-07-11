@@ -1,0 +1,141 @@
+@page "/line-login/callback"
+@using MassageBooking.Models
+@using MassageBooking.Services
+@inject ApiService ApiService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<PageTitle>กำลังเข้าสู่ระบบ...</PageTitle>
+
+<div class="callback-container">
+    <div class="callback-card">
+        <div class="callback-content">
+            @if (isProcessing)
+            {
+                <div class="processing-container">
+                    <div class="large-spinner"></div>
+                    <h2 class="processing-title">กำลังเข้าสู่ระบบ</h2>
+                    <p class="processing-text">กรุณารอสักครู่...</p>
+                </div>
+            }
+            else if (hasError)
+            {
+                <div class="error-container">
+                    <div class="error-icon">❌</div>
+                    <h2 class="error-title">เข้าสู่ระบบไม่สำเร็จ</h2>
+                    <p class="error-text">@errorMessage</p>
+                    <button class="retry-btn" @onclick="RetryLogin">
+                        ลองใหม่อีกครั้ง
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="success-container">
+                    <div class="success-icon">✅</div>
+                    <h2 class="success-title">เข้าสู่ระบบสำเร็จ</h2>
+                    <p class="success-text">กำลังเข้าสู่หน้าหลัก...</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isProcessing = true;
+    private bool hasError = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await ProcessCallback();
+        }
+    }
+
+    private async Task ProcessCallback()
+    {
+        try
+        {
+            var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+            var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+            // Check for error parameters
+            if (query.ContainsKey("error"))
+            {
+                var error = query["error"].ToString();
+                var errorDescription = query.ContainsKey("error_description") ? 
+                    query["error_description"].ToString() : "Unknown error";
+                
+                ShowError($"การเข้าสู่ระบบถูกยกเลิก: {errorDescription}");
+                return;
+            }
+
+            // Get code and state
+            if (!query.ContainsKey("code") || !query.ContainsKey("state"))
+            {
+                ShowError("ข้อมูลการเข้าสู่ระบบไม่ถูกต้อง");
+                return;
+            }
+
+            var code = query["code"].ToString();
+            var state = query["state"].ToString();
+
+            // Verify state
+            var savedState = await JSRuntime.InvokeAsync<string>("sessionStorage.getItem", "oauth_state");
+            if (savedState != state)
+            {
+                ShowError("ข้อมูลการยืนยันตัวตนไม่ถูกต้อง");
+                return;
+            }
+
+            // Exchange code for user profile
+            Console.WriteLine($"Exchanging code: {code} with state: {state}");
+            var userProfile = await ApiService.ExchangeTokenForProfileAsync(code, state);
+            if (userProfile == null)
+            {
+                ShowError("ไม่สามารถดึงข้อมูลผู้ใช้ได้ - กรุณาเปิด Backend API ที่ port 5000");
+                return;
+            }
+
+            // Save user data to session storage
+            Console.WriteLine($"[CALLBACK DEBUG] Saving user data - UserId: {userProfile.UserId}");
+            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "userId", userProfile.UserId);
+            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "displayName", userProfile.DisplayName);
+            if (!string.IsNullOrEmpty(userProfile.PictureUrl))
+            {
+                await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", "pictureUrl", userProfile.PictureUrl);
+            }
+            Console.WriteLine($"[CALLBACK DEBUG] Session storage saved successfully");
+
+            // Clear oauth state
+            await JSRuntime.InvokeVoidAsync("sessionStorage.removeItem", "oauth_state");
+
+            // Show success briefly then redirect
+            isProcessing = false;
+            StateHasChanged();
+            
+            await Task.Delay(1500); // Show success message for 1.5 seconds
+            Navigation.NavigateTo("/home", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            ShowError($"เกิดข้อผิดพลาด: {ex.Message}");
+        }
+    }
+
+    private void ShowError(string message)
+    {
+        isProcessing = false;
+        hasError = true;
+        errorMessage = message;
+        StateHasChanged();
+    }
+
+    private void RetryLogin()
+    {
+        Navigation.NavigateTo("/login", forceLoad: true);
+    }
+}
